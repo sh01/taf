@@ -36,9 +36,6 @@
 import re
 import struct
 
-from gonium.fdm import AsyncDataStream
-
-
 class TafProtocolError(Exception):
   pass
 
@@ -97,7 +94,7 @@ def parse_message(data):
     raise TafProtocolError('Got empty list message.')
   if (type(rv[0]) != int):
     raise TafProtocolError('Got message with invalid payload types: {!r}'.format(msg))
-  return msg
+  return rv
 
 # ================================ Encoder structures
 object_encoders = {
@@ -108,6 +105,14 @@ def reg_encoder(tc):
     return p
   return reg
 
+
+def encode_vint(i, bo='big'):
+   length_b = i.bit_length()
+   length, length_m = divmod(length_b, 8)
+   length += bool(length_m)
+
+   b = i.to_bytes(length, bo)
+   return b
 
 class Encoder:
   def __init__(self):
@@ -122,13 +127,9 @@ class Encoder:
     
   @reg_encoder(int)
   def encode_uint(self, val):
-    length_b = val.bit_length()
-    length, length_m = divmod(length_b, 8)
-    length += bool(length_m)
-    
-    self.set_size(length, len(self.data))
+    b = encode_vint(val)
+    self.set_size(len(b), len(self.data))
     self.data.append(0x01)
-    b = val.to_bytes(length, 'big')
     
     self.data.extend(b)
 
@@ -209,31 +210,35 @@ def reg_es_parsers(cls):
 
 
 @reg_es_parsers
-class EventStream(AsyncDataStream):
-  def __init__(self, *args, **kwargs):
-    self.size_need = 4
-    super().__init__(*args, **kwargs)
+class EventStream:
+  def __init__(self, fl_in, fl_out):
+    self.fl_in = fl_in
+    fl_in.process_input = self.process_input
+    self.fl_out = fl_out
+    self.fl_in.size_need = 4
 
   def process_input(self, data):
     disc = 0
     while len(data) > 4:
       sz = get_size(data)
       if (len(data) < sz):
-        self.size_need = sz + 5
+        self.fl_in.size_need = sz + 5
         break
 
       msg = parse_message(data)
       mtype = msg[0]
-      
-      p = self.msg_handlers.get[mtype]
+
+      p = self.msg_handlers.get(mtype)
+      if (p is None):
+        raise TafProtocolError('Unknown mtype in {}.'.format(msg))
       p(self, msg)
 
       data = data[sz:]
     else:
-      self.size_need = 4
+      self.fl_in.size_need = 4
 
   def send_msg(self, msg):
-    self.send_bytes((encode_msg(msg),))
+    self.fl_out.send_bytes((encode_msg(msg),))
 
   def send_ping(self, arg):
     self.send_msg([MSG_ID_PING, arg])
@@ -250,6 +255,8 @@ class Watch:
     self.set = False
     self.idx = None
 
+  def __repr__(self):
+    return '{}<**{}>'.format(type(self).__name__, self.__dict__)
 
 @reg_es_parsers
 class EventStreamClient(EventStream):
@@ -261,14 +268,20 @@ class EventStreamClient(EventStream):
     (_, idx) = msg
     self.process_notify(idx)
 
+  def process_msg_ACK(self, msg):
+    pass
+
   def reset(self):
     self.send_msg([MSG_ID_RESET])
+
+  def watch_set(self, wids):
+    self.send_msg([MSG_ID_WATCH_SET, wids])
 
   def add_watch(self, fn_p, line_p):
     w = Watch(fn_p, line_p)
     w.idx = self.watch_count
     self.watch_count += 1
-    self.send_msg([MSG_WATCH_SETUP, fn_p, line_p])
+    self.send_msg([MSG_ID_WATCH_SETUP, fn_p, line_p])
 
     return w
     
@@ -283,13 +296,25 @@ class EventStreamServer(EventStream):
   def send_ACK(self):
     self.send_msg([MSG_ID_ACK])
 
+  def watch_files(self, fns):
+    pass
+
+  def get_watched_files(self):
+    return [k for (k,v) in self.fn2ws.items() if v]
+
+  def add_file(self, fn):
+    self.fn2ws.setdefault(fn, [])
+
   def add_watch(self, w):
     w.idx = len(self.watchs)
     w.__active = False
     self.watchs.append(w)
+    fns = []
     for (fn, ws) in self.fn2ws.items():
       if w.fn_p.search(fn):
         ws.append(w)
+        fns.append(fn)
+    self.watch_files(fns)
 
   def notify(self, fn):
     for w in self.get_watchs(fn):
@@ -300,8 +325,8 @@ class EventStreamServer(EventStream):
 
   def process_msg_WATCH_SETUP(self, msg):
     (_, fn_p, line_p) = msg
-    fn_r = re.compile(fn_p)
-    line_r = re.compile(line_p)
+    fn_r = re.compile(bytes(fn_p))
+    line_r = re.compile(bytes(line_p))
     w = Watch(fn_r, line_r)
     self.add_watch(w)
     self.send_msg([MSG_ID_ACK])
@@ -309,10 +334,13 @@ class EventStreamServer(EventStream):
   def process_msg_WATCH_SET(self, msg):
     (_, mask) = msg
     v = int.from_bytes(mask, 'little')
-    i = 1
-    while (i < v):
-      self.watchs.__active = bool(i & v)
-      i *= 2
+    i = 0
+    p = 1
+
+    while (p <= v):
+      self.watchs[i].__active = bool(p & v)
+      i += 1
+      p <<= 1
 
   def process_msg_RESET(self, msg):
     for w in self.watchs:
