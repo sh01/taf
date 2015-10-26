@@ -35,6 +35,7 @@
 
 import re
 import struct
+import sys
 
 class TafProtocolError(Exception):
   pass
@@ -228,16 +229,22 @@ class EventStream:
       msg = parse_message(data)
       mtype = msg[0]
 
+      #sys.stderr.write('DO1: {}\n'.format(msg)); sys.stderr.flush()
       p = self.msg_handlers.get(mtype)
       if (p is None):
         raise TafProtocolError('Unknown mtype in {}.'.format(msg))
       p(self, msg)
 
       data = data[sz:]
+      disc += sz
     else:
       self.fl_in.size_need = 4
 
+    if (disc > 0):
+      self.fl_in.discard_inbuf_data(disc)
+
   def send_msg(self, msg):
+    #sys.stderr.write('DO0: {}\n'.format(msg)); sys.stderr.flush()
     self.fl_out.send_bytes((encode_msg(msg),))
 
   def send_ping(self, arg):
@@ -338,7 +345,9 @@ class EventStreamServer(EventStream):
     p = 1
 
     while (p <= v):
-      self.watchs[i].__active = bool(p & v)
+      w = self.watchs[i]
+      w.__active = bool(p & v)
+
       i += 1
       p <<= 1
 

@@ -27,17 +27,50 @@ from gi.repository import Gtk as gtk
 
 
 class GtkTrayIcon:
-  def __init__(self):
-    self.ai = ai = app_indicator.Indicator.new('goo',os.path.abspath('icon.png'),app_indicator.IndicatorCategory.COMMUNICATIONS)
-    ai.set_status(app_indicator.IndicatorStatus.ACTIVE)
-    ai.set_attention_icon("indicator-messages-new")
+  IS_ACTIVE = app_indicator.IndicatorStatus.ACTIVE
+  IS_ATTENTION = app_indicator.IndicatorStatus.ATTENTION
 
-    self.menu = menu = Gtk.Menu()
+  def __init__(self, sa, ip_inactive, ip_active):
+    self.sa = sa
+    self.ip_inactive = ip_inactive
+    self.ip_active = ip_active
+
+    self.ai = ai = app_indicator.Indicator.new('TAF', ip_inactive, app_indicator.IndicatorCategory.COMMUNICATIONS)
+    ai.set_status(self.IS_ACTIVE)
+
+    self.menu = menu = gtk.Menu()
+
+    def sd(*_):
+      sa.ed.shutdown()
+      sa.bump_ml()
+
+    self.add_menu_item('Quit', sd)
+    self.add_menu_sep()
+
+    ai.connect('scroll-event', sd)
+
+    menu.show_all()
     ai.set_menu(menu)
 
-  def notify(self):
-    pass
+  def add_menu_sep(self):
+    sep = gtk.SeparatorMenuItem()
+    self.menu.append(sep)
 
+  def add_menu_item(self, title, callback):
+    item = gtk.MenuItem(title)
+    item.connect('activate', callback)
+    item.show()
+    self.menu.append(item)
+    return item
+
+  def notify(self):
+    self.ai.set_status(self.IS_ATTENTION)
+    self.ai.set_icon(self.ip_active)
+
+  def reset(self):
+    self.ai.set_status(self.IS_ACTIVE)
+    self.ai.set_icon(self.ip_inactive)
+  
 
 def ed_shutdown(ed):
   def shutdown(*args, **kwargs):
@@ -50,14 +83,16 @@ class Notifier:
     self._p = None
     self._watch_sets = None
     self._conf = conf
+    self._ed = conf.sa.ed
+    self.ti = conf.build_icon()
 
-  def start_forward(self, ed, tspec, dir_):
-    self._p = p = AsyncPopen(ed, [b'ssh', tspec, b'strace -tt -otmp/t1.log', b'.exe/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
+  def start_forward(self, tspec, dir_):
+    self._p = p = AsyncPopen(self._ed, [b'ssh', tspec, b'strace -tt -otmp/t1.log', b'.exe/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
     self._esc = c = EventStreamClient(p.stdout_async, p.stdin_async)
 
     self._set_config()
 
-    sd = ed_shutdown(ed)
+    sd = ed_shutdown(self._ed)
     c.fl_in.process_close = sd
     c.fl_out.process_close = sd
     c.process_notify = self.process_notify
@@ -66,9 +101,25 @@ class Notifier:
 
   def pick_ws(self, idx):
     self._esc.watch_set(self._watch_sets[idx].mask)
+    self._esc.reset()
+
+  def get_ws_picker(self, idx):
+    return self.wrap_bump_ml(self.pick_ws, idx)
+
+  def wrap_bump_ml(self, f, *args, **kwargs):
+    def wrap(*_):
+      self._ed.set_timer(0, f, args=args, kwargs=kwargs, interval_relative=False)
+      self._conf.sa.bump_ml()
+
+    return wrap
+
+  def reset(self, *_):
+    self.wrap_bump_ml(self._esc.reset)()
+    self.ti.reset()
 
   def process_notify(self, idx):
     print('AX {}'.format(idx))
+    self.ti.notify()
 
   def _set_config(self):
     self._p = self._conf.patterns
@@ -77,7 +128,13 @@ class Notifier:
       if (w.idx != i):
         raise ValueError('Watch setup idx mismatch: {} != {}'.format(w.idx, i))
 
-    self._watch_sets = self._conf.watch_sets
+    self._watch_sets = wss = self._conf.watch_sets
+    for (i, ws) in enumerate(wss):
+      self.ti.add_menu_item(ws.desc, self.get_ws_picker(i))
+
+    self.ti.add_menu_sep()
+    self.ti.add_menu_item('Reset', self.reset)
+    
 
 
 class Pattern:
@@ -95,7 +152,8 @@ class WatchSet:
     self.desc = desc
 
 class Config:
-  def __init__(self):
+  def __init__(self, sa):
+    self.sa = sa
     self.patterns = []
     self.watch_sets = []
 
@@ -131,7 +189,14 @@ class Config:
 
   def set_forward_args(self, *args):
     self.forward_args = args
-    
+
+  def set_icons(self, ip_inactive, ip_active):
+    self.ip_inactive = ip_inactive
+    self.ip_active = ip_active
+
+  def build_icon(self):
+    return GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active)
+
 
 def main():
   import argparse
@@ -146,12 +211,14 @@ def main():
   args = p.parse_args()
   sa = ServiceAggregate()
 
+  sa.bump_ml = lambda: os.write(sa.sc._pipe_w, b'\x00')
+
   config_fn = os.path.expanduser(args.config)
-  config = Config()
+  config = Config(sa)
   config.load_config_by_fn(config_fn)
 
   n = Notifier(config)
-  n.start_forward(sa.ed, *config.forward_args)
+  n.start_forward(*config.forward_args)
 
   # Signal handling
   def handle_signals(si_l):
@@ -163,8 +230,8 @@ def main():
   sa.sc.handle_signals.new_listener(handle_signals)
 
   # gtk setup
-  #ui_thread = Thread(target=gtk.main, name='ui', daemon=True)
-  #ui_thread.start()
+  ui_thread = Thread(target=gtk.main, name='ui', daemon=True)
+  ui_thread.start()
 
   sa.ed.event_loop()
   
