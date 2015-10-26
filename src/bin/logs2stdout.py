@@ -52,6 +52,7 @@ class FileGazer:
     if (sz != sz_prev):
       self.fp2sz[pn] = sz
       lines = None
+
       def get_lines():
         nonlocal lines
         if (lines is None):
@@ -65,7 +66,7 @@ class FileGazer:
         #sys.stderr.write('L: {!r}\n'.format(lines)); sys.stderr.flush()
         return lines
 
-    self.stream.notify(pn, get_lines)
+        self.stream.notify(pn, get_lines)
 
   def start_stdio(self):
     fl_in = AsyncDataStream(self.ed, os.fdopen(sys.stdin.fileno(), 'rb', 0, closefd=False))
