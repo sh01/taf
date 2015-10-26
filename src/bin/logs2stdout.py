@@ -62,6 +62,7 @@ class FileGazer:
           lines = data.split(b'\n')
           if (lines and lines[-1] == b''):
             del(lines[-1])
+        #sys.stderr.write('L: {!r}\n'.format(lines)); sys.stderr.flush()
         return lines
 
     self.stream.notify(pn, get_lines)
