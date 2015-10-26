@@ -87,7 +87,7 @@ class Notifier:
     self.ti = conf.build_icon()
 
   def start_forward(self, tspec, dir_):
-    self._p = p = AsyncPopen(self._ed, [b'ssh', tspec, b'strace -tt -otmp/t1.log', b'.exe/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
+    self._p = p = AsyncPopen(self._ed, [b'ssh', tspec, b'~/.local/bin/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
     self._esc = c = EventStreamClient(p.stdout_async, p.stdin_async)
 
     self._set_config()
@@ -135,7 +135,6 @@ class Notifier:
     self.ti.add_menu_sep()
     self.ti.add_menu_item('Reset', self.reset)
     
-
 
 class Pattern:
   def __init__(self, sp, fn_p, idx):

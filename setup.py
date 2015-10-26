@@ -29,6 +29,8 @@ setup(name='taf',
    #url='http://git.memespace.net/git/??',
    packages=('taf',),
    scripts=(
+	'src/bin/logs2stdout.py',
+	'src/bin/gui_gtk.py'
    ),
    package_dir={'taf':'src/taf'}
 )

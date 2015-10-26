@@ -1,0 +1,18 @@
+# ======== Forward / Icon config
+set_forward_args(b'bouncer@remote', b'.luteus/log/irc')
+set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')
+set_pid_file('~/.taf/run/pid')
+
+p = add_pattern
+
+# ==== Public channels, highlighted.
+e_hl = b'(^|[^A-z0-9\.])mynick([^A-z0-9]|$)'
+
+p0 = p(b"^network/chan0", e_hl)
+p1 = p(b"^network/chan1", e_hl)
+
+# ======== set up watchsets
+w = add_watchset
+
+w([p0], 'Just chan0')
+w([p0, p1], 'Chan0 + Chan1')

@@ -1,0 +1,18 @@
+== Meta ==
+This is the README file for Tunneled Attention Flags.
+
+== Purpose ==
+TAF is a remote logfile watcher and notifier.
+
+== Dependencies ==
+* a posix-like OS
+* Python 3.x
+* Gonium >= f44bed45c603dacd233f1a9eb65e79c2a4ad2a75
+
+== Licensing ==
+All of TAF is licensed under the GNU GPL version 2 or later (your choice);
+see COPYING for the full license text.
+
+== Setup ==
+ * server: ./setup install --user
+ * client: mkdir -p ~/.taf/run; cp example/config ~/.taf/config; ./setup install --user
