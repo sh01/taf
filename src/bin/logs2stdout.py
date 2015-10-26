@@ -36,7 +36,7 @@ class FileGazer:
     self.fp2sz = {}
 
   def _start_watch(self):
-    from gonium.fdm import inotify
+    from gonium.linux import inotify
 
     self.iw = inotify.InotifyWatch(self.ed)
     self.iw.process_event = self._process_inotify_event
@@ -109,7 +109,7 @@ class FileGazer:
     self.wd2pn[wd] = pn
 
   def _watch_files(self, pns):
-    from gonium.fdm.inotify import IN_MODIFY
+    from gonium.linux.inotify import IN_MODIFY
 
     for pn in pns:
       wd = self.iw.add_watch(pn, IN_MODIFY)
