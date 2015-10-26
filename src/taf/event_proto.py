@@ -341,14 +341,10 @@ class EventStreamServer(EventStream):
   def process_msg_WATCH_SET(self, msg):
     (_, mask) = msg
     v = int.from_bytes(mask, 'little')
-    i = 0
+
     p = 1
-
-    while (p <= v):
-      w = self.watchs[i]
+    for (i, w) in enumerate(self.watchs):
       w.__active = bool(p & v)
-
-      i += 1
       p <<= 1
 
   def process_msg_RESET(self, msg):
