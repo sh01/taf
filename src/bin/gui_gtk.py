@@ -156,6 +156,7 @@ class Config:
     self.sa = sa
     self.patterns = []
     self.watch_sets = []
+    self.pid_path = None
 
     ns = {}
     for name in dir(self):
@@ -194,19 +195,31 @@ class Config:
     self.ip_inactive = ip_inactive
     self.ip_active = ip_active
 
+  def set_pid_file(self, path):
+    from os.path import expanduser
+    self.pid_path = expanduser(path)
+
   def build_icon(self):
     return GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active)
+  
+  def file_pid(self):
+    if (self.pid_path is None):
+      return
+    from gonium.pid_filing import PidFile
+    self.pid_file = f = PidFile(self.pid_path)
+    f.lock()
 
 
 def main():
   import argparse
   import os
+  import signal
 
   from gonium.service_aggregation import ServiceAggregate
   from threading import Thread
 
   p = argparse.ArgumentParser()
-  p.add_argument('--config', '-c', default='taf.conf')
+  p.add_argument('--config', '-c', default='~/.taf/config')
 
   args = p.parse_args()
   sa = ServiceAggregate()
@@ -217,17 +230,25 @@ def main():
   config = Config(sa)
   config.load_config_by_fn(config_fn)
 
+  config.file_pid()
+
   n = Notifier(config)
   n.start_forward(*config.forward_args)
 
   # Signal handling
   def handle_signals(si_l):
     for si in si_l:
-      if ((si.signo == signal.SIGTERM) or (si.signo == signal.SIGINT)):
+      if (si.signo in (signal.SIGTERM, signal.SIGINT)):
         sa.ed.shutdown()
         #log(50, 'Shutting down on signal {}.'.format(si.signo))
         break
+      if (si.signo == signal.SIGUSR1):
+        n.reset()
+        break
+
   sa.sc.handle_signals.new_listener(handle_signals)
+  for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGUSR1):
+    sa.sc.sighandler_install(sig, sa.sc.SA_RESTART)
 
   # gtk setup
   ui_thread = Thread(target=gtk.main, name='ui', daemon=True)
