@@ -33,6 +33,7 @@ class FileGazer:
     self.ed = ed
     self.stream = None
     self.wd2pn = []
+    self.fp2sz = {}
 
   def _start_watch(self):
     from gonium.fdm import inotify
@@ -41,9 +42,29 @@ class FileGazer:
     self.iw.process_event = self._process_inotify_event
 
   def _process_inotify_event(self, wd, mask, cookie, name):
+    from os import stat
+
     pn = self.wd2pn[wd]
     # TODO: Match line patterns
-    self.stream.notify(pn)
+    sz = stat(pn).st_size
+    sz_prev = self.fp2sz.get(pn)
+
+    if (sz != sz_prev):
+      self.fp2sz[pn] = sz
+      lines = None
+      def get_lines():
+        nonlocal lines
+        if (lines is None):
+          f = open(pn, 'rb')
+          f.seek(sz_prev)
+          data = f.read()
+          f.close()
+          lines = data.split(b'\n')
+          if (lines and lines[-1] == b''):
+            del(lines[-1])
+        return lines
+
+    self.stream.notify(pn, get_lines)
 
   def start_stdio(self):
     fl_in = AsyncDataStream(self.ed, os.fdopen(sys.stdin.fileno(), 'rb', 0, closefd=False))
@@ -57,6 +78,12 @@ class FileGazer:
     self.stream.watch_files = self._watch_files
     self._start_watch()
 
+  def update_file_size(self, path):
+    from os import stat
+    sz_prev = self.fp2sz.get(path)
+    self.fp2sz[path] = stat(path).st_size
+    return sz_prev
+
   def scan_dir(self, path):
     from os import walk
     from os.path import join
@@ -67,6 +94,7 @@ class FileGazer:
         if fp.startswith(b'./'):
           fp = fp[2:]
         self.stream.add_file(fp)
+        self.update_file_size(fp)
 
   def watch_all(self):
     self._watch_files(self.stream.get_watched_files())

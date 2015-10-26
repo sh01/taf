@@ -323,12 +323,20 @@ class EventStreamServer(EventStream):
         fns.append(fn)
     self.watch_files(fns)
 
-  def notify(self, fn):
+  def notify(self, fn, get_lines):
     for w in self.get_watchs(fn):
       if (not w.__active) or w.set:
         continue
-      w.set = True
-      self.send_msg([MSG_ID_NOTIFY, w.idx])
+
+      # See if any of the new lines are matched by our line pattern.
+      for line in get_lines():
+        m = w.line_p.search(line)
+        if (m is None):
+          continue
+
+        w.set = True
+        self.send_msg([MSG_ID_NOTIFY, w.idx])
+        break
 
   def process_msg_WATCH_SETUP(self, msg):
     (_, fn_p, line_p) = msg
