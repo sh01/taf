@@ -2,6 +2,8 @@
 set_forward_args(b'bouncer@remote', b'.luteus/log/irc')
 set_pid_file('~/.taf/run/pid')
 
+# set_autoreset(True)
+
 # Pick one of the below sections.
 # ==== For GTK trayicon
 set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')

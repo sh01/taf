@@ -33,6 +33,7 @@ class Notifier:
     self._watch_sets = None
     self._conf = conf
     self._ed = conf.sa.ed
+    self._do_autoreset = conf.do_autoreset
     self.n = conf.notifier
 
   def start_forward(self, tspec, dir_):
@@ -62,12 +63,17 @@ class Notifier:
 
     return wrap
 
-  def reset(self, *_):
+  def reset_remote(self):
     self.wrap_bump_ml(self._esc.reset)()
+
+  def reset(self, *_):
+    self.reset_remote()
     self.n.reset()
 
   def process_notify(self, idx):
     print('AX {}'.format(idx))
+    if (self._do_autoreset):
+      self.reset_remote()
     self.n.notify(idx)
 
   def _set_config(self):
@@ -111,6 +117,7 @@ class Config:
     self.patterns = []
     self.watch_sets = []
     self.pid_path = None
+    self.do_autoreset = False
 
     ns = {}
     for name in dir(self):
@@ -121,6 +128,9 @@ class Config:
     self._config_ns = ns
     self.inits = {}
     self.notifier = None
+
+  def set_autoreset(self, v):
+    self.do_autoreset = bool(v)
 
   def load_config_by_fn(self, fn):
     file = open(fn, 'rb')
