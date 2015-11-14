@@ -30,7 +30,7 @@ setup(name='taf',
    packages=('taf',),
    scripts=(
 	'src/bin/logs2stdout.py',
-	'src/bin/gui_gtk.py'
+	'src/bin/ui.py'
    ),
    package_dir={'taf':'src/taf'}
 )
