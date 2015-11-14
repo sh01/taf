@@ -68,7 +68,7 @@ class Notifier:
 
   def process_notify(self, idx):
     print('AX {}'.format(idx))
-    self.n.notify()
+    self.n.notify(idx)
 
   def _set_config(self):
     self._p = self._conf.patterns
@@ -100,6 +100,9 @@ class WatchSet:
     self.desc = desc
 
 class ConfigError(Exception):
+  pass
+
+def do_nothing(*a, **kw):
   pass
 
 class Config:
@@ -158,6 +161,10 @@ class Config:
     from taf.ti_gtk import GtkTrayIcon, init
     self.inits['gtk'] = init
     self.notifier = GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active)
+
+  def build_notifier_py(self, notify, reset=do_nothing):
+    from taf.notify_py import PyNotifier
+    self.notifier = PyNotifier(notify, reset)
   
   def file_pid(self):
     if (self.pid_path is None):

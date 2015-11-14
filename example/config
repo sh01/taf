@@ -1,8 +1,13 @@
 # ======== Forward / Icon config
 set_forward_args(b'bouncer@remote', b'.luteus/log/irc')
-set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')
 set_pid_file('~/.taf/run/pid')
+
+# Pick one of the below sections.
+# ==== For GTK trayicon
+set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')
 build_notifier_ti_gtk()
+# ==== For custom py notifies
+build_notifier_py(lambda idx: print('Notify on channel {}'.format(idx)), lambda: print('Reset.'))
 
 p = add_pattern
 

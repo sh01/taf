@@ -64,7 +64,7 @@ class GtkTrayIcon:
     self.menu.append(item)
     return item
 
-  def notify(self):
+  def notify(self, *args, **kwargs):
     self.ai.set_status(self.IS_ATTENTION)
     self.ai.set_icon(self.ip_active)
 
