@@ -2,6 +2,7 @@
 set_forward_args(b'bouncer@remote', b'.luteus/log/irc')
 set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')
 set_pid_file('~/.taf/run/pid')
+build_notifier_ti_gtk()
 
 p = add_pattern
 

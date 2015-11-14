@@ -19,57 +19,6 @@ from subprocess import PIPE
 
 from gonium.fdm import AsyncDataStream, AsyncPopen
 from taf.event_proto import EventStreamClient, encode_vint
-
-
-import gi; gi.require_version('Gtk', '3.0'); gi.require_version('AppIndicator3', '0.1')
-from gi.repository import AppIndicator3 as app_indicator
-from gi.repository import Gtk as gtk
-
-
-class GtkTrayIcon:
-  IS_ACTIVE = app_indicator.IndicatorStatus.ACTIVE
-  IS_ATTENTION = app_indicator.IndicatorStatus.ATTENTION
-
-  def __init__(self, sa, ip_inactive, ip_active):
-    self.sa = sa
-    self.ip_inactive = ip_inactive
-    self.ip_active = ip_active
-
-    self.ai = ai = app_indicator.Indicator.new('TAF', ip_inactive, app_indicator.IndicatorCategory.COMMUNICATIONS)
-    ai.set_status(self.IS_ACTIVE)
-
-    self.menu = menu = gtk.Menu()
-
-    def sd(*_):
-      sa.ed.shutdown()
-      sa.bump_ml()
-
-    self.add_menu_item('Quit', sd)
-    self.add_menu_sep()
-
-    ai.connect('scroll-event', sd)
-
-    menu.show_all()
-    ai.set_menu(menu)
-
-  def add_menu_sep(self):
-    sep = gtk.SeparatorMenuItem()
-    self.menu.append(sep)
-
-  def add_menu_item(self, title, callback):
-    item = gtk.MenuItem(title)
-    item.connect('activate', callback)
-    item.show()
-    self.menu.append(item)
-    return item
-
-  def notify(self):
-    self.ai.set_status(self.IS_ATTENTION)
-    self.ai.set_icon(self.ip_active)
-
-  def reset(self):
-    self.ai.set_status(self.IS_ACTIVE)
-    self.ai.set_icon(self.ip_inactive)
   
 
 def ed_shutdown(ed):
@@ -84,7 +33,7 @@ class Notifier:
     self._watch_sets = None
     self._conf = conf
     self._ed = conf.sa.ed
-    self.ti = conf.build_icon()
+    self.n = conf.notifier
 
   def start_forward(self, tspec, dir_):
     self._p = p = AsyncPopen(self._ed, [b'ssh', tspec, b'~/.local/bin/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
@@ -115,11 +64,11 @@ class Notifier:
 
   def reset(self, *_):
     self.wrap_bump_ml(self._esc.reset)()
-    self.ti.reset()
+    self.n.reset()
 
   def process_notify(self, idx):
     print('AX {}'.format(idx))
-    self.ti.notify()
+    self.n.notify()
 
   def _set_config(self):
     self._p = self._conf.patterns
@@ -130,10 +79,10 @@ class Notifier:
 
     self._watch_sets = wss = self._conf.watch_sets
     for (i, ws) in enumerate(wss):
-      self.ti.add_menu_item(ws.desc, self.get_ws_picker(i))
+      self.n.add_menu_item(ws.desc, self.get_ws_picker(i))
 
-    self.ti.add_menu_sep()
-    self.ti.add_menu_item('Reset', self.reset)
+    self.n.add_menu_sep()
+    self.n.add_menu_item('Reset', self.reset)
     
 
 class Pattern:
@@ -150,6 +99,9 @@ class WatchSet:
     self.mask = mask
     self.desc = desc
 
+class ConfigError(Exception):
+  pass
+
 class Config:
   def __init__(self, sa):
     self.sa = sa
@@ -164,12 +116,16 @@ class Config:
       ns[name] = getattr(self, name)
 
     self._config_ns = ns
+    self.inits = {}
+    self.notifier = None
 
   def load_config_by_fn(self, fn):
     file = open(fn, 'rb')
     file_data = file.read()
     file.close()
     exec(file_data, self._config_ns)
+    if (self.notifier is None):
+      raise ConfigError('No notifier configured.')
 
   def add_pattern(self, sp, fn_p):
     idx = len(self.patterns)
@@ -198,8 +154,10 @@ class Config:
     from os.path import expanduser
     self.pid_path = expanduser(path)
 
-  def build_icon(self):
-    return GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active)
+  def build_notifier_ti_gtk(self):
+    from taf.ti_gtk import GtkTrayIcon, init
+    self.inits['gtk'] = init
+    self.notifier = GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active)
   
   def file_pid(self):
     if (self.pid_path is None):
@@ -208,6 +166,9 @@ class Config:
     self.pid_file = f = PidFile(self.pid_path)
     f.lock()
 
+  def run_inits(self):
+    for init in self.inits.values():
+      init()
 
 def main():
   import argparse
@@ -215,7 +176,6 @@ def main():
   import signal
 
   from gonium.service_aggregation import ServiceAggregate
-  from threading import Thread
 
   p = argparse.ArgumentParser()
   p.add_argument('--config', '-c', default='~/.taf/config')
@@ -249,10 +209,7 @@ def main():
   for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGUSR1):
     sa.sc.sighandler_install(sig, sa.sc.SA_RESTART)
 
-  # gtk setup
-  ui_thread = Thread(target=gtk.main, name='ui', daemon=True)
-  ui_thread.start()
-
+  config.run_inits()
   sa.ed.event_loop()
   
 
