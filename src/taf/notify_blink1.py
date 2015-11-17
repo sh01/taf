@@ -41,6 +41,14 @@ class Blinker:
   def off(self):
     self.set_color(0,0,0)
 
+  def clear(self):
+    # Prevent exception reporting through libusb destructors
+    try:
+      self.dev._ctx.dispose(self.dev)
+    except Exception:
+      pass
+    self.dev._ctx.dispose = lambda *a, **kw: None
+
   @classmethod
   def build_auto(cls):
     dev = usb.core.find(idVendor=0x27b8, idProduct=0x01ed)
@@ -66,11 +74,17 @@ class BlinkNotifier:
       rv = self.blinker = Blinker.build_auto()
     return rv
 
+  def clear_blinker(self):
+    if (self.blinker is None):
+      return
+    self.blinker.clear()
+    self.blinker = None
+
   def notify(self, idx):
     try:
       self.get_blinker().set_color(*self.signal_color)
     except Exception as exc:
-      self.blinker = None
+      self.clear_blinker()
       log(30, 'Failed to blink1-notify(): {!r}'.format(str(exc)))
 
   def reset(self):
@@ -80,5 +94,5 @@ class BlinkNotifier:
     try:
       bl.off()
     except Exception as exc:
-      self.blinker = None
+      self.clear_blinker()
       log(30, 'Failed to blink1-reset(): {!r}'.format(str(exc)))
