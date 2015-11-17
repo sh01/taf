@@ -4,7 +4,7 @@ set_pid_file('~/.taf/run/pid')
 
 # set_autoreset(True)
 
-# Pick one of the below sections.
+# Pick at least one of the below sections.
 # ==== For GTK trayicon
 set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')
 build_notifier_ti_gtk()

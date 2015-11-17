@@ -37,7 +37,7 @@ class Notifier:
     self._conf = conf
     self._ed = conf.sa.ed
     self._do_autoreset = conf.do_autoreset
-    self.n = conf.notifier
+    self.n = conf.notify_proxy()
 
   def start_forward(self, tspec, dir_):
     self._p = p = AsyncPopen(self._ed, [b'ssh', tspec, b'~/.local/bin/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
@@ -92,7 +92,7 @@ class Notifier:
 
     self.n.add_menu_sep()
     self.n.add_menu_item('Reset', self.reset)
-    
+
 
 class Pattern:
   def __init__(self, sp, fn_p, idx):
@@ -114,6 +114,18 @@ class ConfigError(Exception):
 def do_nothing(*a, **kw):
   pass
 
+class NotifyProxy:
+  def __init__(self, targets):
+    self.t = targets
+
+  def __getattr__(self, name):
+    methods = [getattr(t, name) for t in self.t]
+    def proxy(*args, **kwargs):
+      for m in methods:
+        m(*args, **kwargs)
+    return proxy
+
+
 class Config:
   def __init__(self, sa):
     self.sa = sa
@@ -131,7 +143,10 @@ class Config:
     self._config_ns = ns
     self.inits = {}
     self.finis = {}
-    self.notifier = None
+    self.notifiers = []
+
+  def notify_proxy(self):
+    return NotifyProxy(self.notifiers)
 
   def set_autoreset(self, v):
     self.do_autoreset = bool(v)
@@ -141,7 +156,7 @@ class Config:
     file_data = file.read()
     file.close()
     exec(file_data, self._config_ns)
-    if (self.notifier is None):
+    if (not self.notifiers):
       raise ConfigError('No notifier configured.')
 
   def add_pattern(self, sp, fn_p):
@@ -171,19 +186,23 @@ class Config:
     from os.path import expanduser
     self.pid_path = expanduser(path)
 
+  def add_notifier(self, n):
+    self.notifiers.append(n)
+
   def build_notifier_ti_gtk(self):
     from taf.ti_gtk import GtkTrayIcon, init
     self.inits['gtk'] = init
-    self.notifier = GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active)
+    self.add_notifier(GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active))
 
   def build_notifier_py(self, notify, reset=do_nothing):
     from taf.notify_py import PyNotifier
-    self.notifier = PyNotifier(notify, reset)
+    self.add_notifier(PyNotifier(notify, reset))
   
   def build_notifier_blink1(self, r, g, b):
     from taf.notify_blink1 import BlinkNotifier
-    self.notifier = n = BlinkNotifier((r, g, b))
+    n = BlinkNotifier((r, g, b))
     self.finis[id(n)] = n.reset
+    self.add_notifier(n)
 
   def file_pid(self):
     if (self.pid_path is None):
