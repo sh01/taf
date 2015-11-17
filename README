@@ -9,8 +9,12 @@ TAF is a remote logfile watcher and notifier.
 * Python 3.x
 * Gonium >= f44bed45c603dacd233f1a9eb65e79c2a4ad2a75
 
-for GTK trayicon notifier:
+For GTK trayicon notifier:
   * python3-gi
+
+For blink1 notifier:
+  * libusb
+  * PyUSB (for python3)
 
 == Licensing ==
 All of TAF is licensed under the GNU GPL version 2 or later (your choice);
