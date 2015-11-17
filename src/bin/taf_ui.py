@@ -15,11 +15,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
 from subprocess import PIPE
 
 from gonium.fdm import AsyncDataStream, AsyncPopen
 from taf.event_proto import EventStreamClient, encode_vint
-  
+
+logger = logging.getLogger('taf_ui')
+log = logger.log
 
 def ed_shutdown(ed):
   def shutdown(*args, **kwargs):
@@ -71,7 +74,7 @@ class Notifier:
     self.n.reset()
 
   def process_notify(self, idx):
-    print('AX {}'.format(idx))
+    log(10, 'Notify: {}'.format(idx))
     if (self._do_autoreset):
       self.reset_remote()
     self.n.notify(idx)
@@ -127,6 +130,7 @@ class Config:
 
     self._config_ns = ns
     self.inits = {}
+    self.finis = {}
     self.notifier = None
 
   def set_autoreset(self, v):
@@ -176,6 +180,11 @@ class Config:
     from taf.notify_py import PyNotifier
     self.notifier = PyNotifier(notify, reset)
   
+  def build_notifier_blink1(self, r, g, b):
+    from taf.notify_blink1 import BlinkNotifier
+    self.notifier = n = BlinkNotifier((r, g, b))
+    self.finis[id(n)] = n.reset
+
   def file_pid(self):
     if (self.pid_path is None):
       return
@@ -187,17 +196,25 @@ class Config:
     for init in self.inits.values():
       init()
 
+  def run_finis(self):
+    for fini in self.finis.values():
+      fini()
+
 def main():
   import argparse
   import os
   import signal
+  import sys
 
   from gonium.service_aggregation import ServiceAggregate
 
   p = argparse.ArgumentParser()
   p.add_argument('--config', '-c', default='~/.taf/config')
+  p.add_argument('--loglevel', '-L', default=20, type=int)
 
   args = p.parse_args()
+  logging.basicConfig(format='%(asctime)s %(levelno)s %(message)s', stream=sys.stderr, level=args.loglevel)
+
   sa = ServiceAggregate()
 
   sa.bump_ml = lambda: os.write(sa.sc._pipe_w, b'\x00')
@@ -216,7 +233,7 @@ def main():
     for si in si_l:
       if (si.signo in (signal.SIGTERM, signal.SIGINT)):
         sa.ed.shutdown()
-        #log(50, 'Shutting down on signal {}.'.format(si.signo))
+        log(50, 'Shutting down on signal {}.'.format(si.signo))
         break
       if (si.signo == signal.SIGUSR1):
         n.reset()
@@ -227,8 +244,10 @@ def main():
     sa.sc.sighandler_install(sig, sa.sc.SA_RESTART)
 
   config.run_inits()
+  log(20, 'Starting operation.')
   sa.ed.event_loop()
-  
+  config.run_finis()
+  log(20, 'Terminating.')
 
 if (__name__ == '__main__'):
   main()

@@ -10,6 +10,9 @@ set_icons('', '/usr/share/icons/oxygen/64x64/apps/telepathy-kde.png')
 build_notifier_ti_gtk()
 # ==== For custom py notifies
 build_notifier_py(lambda idx: print('Notify on channel {}'.format(idx)), lambda: print('Reset.'))
+# ==== For blink1 USB LED notification
+# Arguments specify the notify color as R,G,B
+build_notifier_blink1(0,10,0)
 
 p = add_pattern
 
