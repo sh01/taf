@@ -56,12 +56,13 @@ class Blinker:
 
 
 class BlinkNotifier:
-  def __init__(self, color):
+  def __init__(self):
     self.blinker = None
-    color = [int(x) for x in color]
-    if (len(color) != 3):
-      raise ValueError('Invalid color value {!r}; expected 3-sequence.'.format(color))
-    self.signal_color = color
+    self.color = None
+    self.signal_color = (0,0,0)
+
+  def set_notify_color(self, r, g, b):
+    self.signal_color = [int(x) for x in (r, g, b)]
 
   def add_menu_sep(self, *a, **k):
     pass

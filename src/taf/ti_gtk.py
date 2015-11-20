@@ -31,12 +31,12 @@ class GtkTrayIcon:
   IS_ACTIVE = app_indicator.IndicatorStatus.ACTIVE
   IS_ATTENTION = app_indicator.IndicatorStatus.ATTENTION
 
-  def __init__(self, sa, ip_inactive, ip_active):
+  def __init__(self, sa):
+    self.ip_active = None
+    self.ip_inactive = None
     self.sa = sa
-    self.ip_inactive = ip_inactive
-    self.ip_active = ip_active
 
-    self.ai = ai = app_indicator.Indicator.new('TAF', ip_inactive, app_indicator.IndicatorCategory.COMMUNICATIONS)
+    self.ai = ai = app_indicator.Indicator.new('TAF', '', app_indicator.IndicatorCategory.COMMUNICATIONS)
     ai.set_status(self.IS_ACTIVE)
 
     self.menu = menu = gtk.Menu()
@@ -64,10 +64,17 @@ class GtkTrayIcon:
     self.menu.append(item)
     return item
 
+  def set_icons(self, ip_inactive, ip_active):
+    self.ip_inactive = ip_inactive
+    self.ip_active = ip_active
+    self.reset()
+
   def notify(self, *args, **kwargs):
     self.ai.set_status(self.IS_ATTENTION)
-    self.ai.set_icon(self.ip_active)
+    if not (self.ip_active is None):
+      self.ai.set_icon(self.ip_active)
 
   def reset(self):
     self.ai.set_status(self.IS_ACTIVE)
-    self.ai.set_icon(self.ip_inactive)
+    if not (self.ip_inactive is None):
+      self.ai.set_icon(self.ip_inactive)

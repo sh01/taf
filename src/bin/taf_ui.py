@@ -178,31 +178,28 @@ class Config:
   def set_forward_args(self, *args):
     self.forward_args = args
 
-  def set_icons(self, ip_inactive, ip_active):
-    self.ip_inactive = ip_inactive
-    self.ip_active = ip_active
-
   def set_pid_file(self, path):
     from os.path import expanduser
     self.pid_path = expanduser(path)
 
   def add_notifier(self, n):
     self.notifiers.append(n)
+    return n
 
   def build_notifier_ti_gtk(self):
     from taf.ti_gtk import GtkTrayIcon, init
     self.inits['gtk'] = init
-    self.add_notifier(GtkTrayIcon(self.sa, self.ip_inactive, self.ip_active))
+    return self.add_notifier(GtkTrayIcon(self.sa))
 
   def build_notifier_py(self, notify, reset=do_nothing):
     from taf.notify_py import PyNotifier
-    self.add_notifier(PyNotifier(notify, reset))
+    return self.add_notifier(PyNotifier(notify, reset))
   
-  def build_notifier_blink1(self, r, g, b):
+  def build_notifier_blink1(self):
     from taf.notify_blink1 import BlinkNotifier
-    n = BlinkNotifier((r, g, b))
+    n = BlinkNotifier()
     self.finis[id(n)] = n.reset
-    self.add_notifier(n)
+    return self.add_notifier(n)
 
   def file_pid(self):
     if (self.pid_path is None):
