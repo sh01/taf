@@ -40,7 +40,9 @@ class Notifier:
     self.n = conf.notify_proxy()
 
   def start_forward(self, tspec, dir_):
-    self._p = p = AsyncPopen(self._ed, [b'ssh', tspec, b'~/.local/bin/logs2stdout.py', b'--cd', dir_], bufsize=0, stdin=PIPE, stdout=PIPE)
+    args = [b'ssh', tspec, b'~/.local/bin/logs2stdout.py', b'--cd', dir_]
+    log(10, 'Calling out: %s', ' '.join((repr(a.decode('utf-8')) for a in args)))
+    self._p = p = AsyncPopen(self._ed, args, bufsize=0, stdin=PIPE, stdout=PIPE)
     self._esc = c = EventStreamClient(p.stdout_async, p.stdin_async)
 
     self._set_config()
