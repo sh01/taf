@@ -85,6 +85,9 @@ def parse_list(data):
 
 def parse_object(data):
   tc = data[4]
+  if isinstance(tc, bytes):
+    # Work around python3.2 memoryview interface oddities.
+    tc = tc[0]
   try:
     p = object_parsers[tc]
   except KeyError:
