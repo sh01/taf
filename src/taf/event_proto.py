@@ -33,9 +33,13 @@
 #   0x05: Reset.
 #   0x06: Notify
 
+import logging
 import re
 import struct
 import sys
+
+logger = logging.getLogger('event_proto')
+log = logger.log
 
 class TafProtocolError(Exception):
   pass
@@ -226,7 +230,9 @@ class EventStream:
         self.fl_in.size_need = sz + 5
         break
 
+      log(8, 'Parsing: {!a}'.format(bytes(data)))
       msg = parse_message(data)
+      log(8, 'Parsed: {!a}'.format(msg))
       mtype = msg[0]
 
       #sys.stderr.write('DO1: {}\n'.format(msg)); sys.stderr.flush()
@@ -245,7 +251,10 @@ class EventStream:
 
   def send_msg(self, msg):
     #sys.stderr.write('DO0: {}\n'.format(msg)); sys.stderr.flush()
-    self.fl_out.send_bytes((encode_msg(msg),))
+    log(8, 'Sending: {!a}'.format(msg))
+    data = encode_msg(msg)
+    self.fl_out.send_bytes((data,))
+    log(8, 'Sent: {!a}'.format(data))
 
   def send_ping(self, arg):
     self.send_msg([MSG_ID_PING, arg])
