@@ -36,7 +36,6 @@ class Notifier:
     self._watch_sets = None
     self._conf = conf
     self._ed = conf.sa.ed
-    self._do_autoreset = conf.do_autoreset
     self.n = conf.notify_proxy()
 
   def start_forward(self, tspec, dir_):
@@ -45,6 +44,7 @@ class Notifier:
     self._p = p = AsyncPopen(self._ed, args, bufsize=0, stdin=PIPE, stdout=PIPE)
     self._esc = c = EventStreamClient(p.stdout_async, p.stdin_async)
 
+    c.send_config(self._conf.get_proto_config())
     self._set_config()
 
     sd = ed_shutdown(self._ed)
@@ -77,8 +77,6 @@ class Notifier:
 
   def process_notify(self, idx):
     log(10, 'Notify: {}'.format(idx))
-    if (self._do_autoreset):
-      self.reset_remote()
     self.n.notify(idx)
 
   def _set_config(self):
@@ -134,7 +132,7 @@ class Config:
     self.patterns = []
     self.watch_sets = []
     self.pid_path = None
-    self.do_autoreset = False
+    self.auto_reset = False
 
     ns = {}
     for name in dir(self):
@@ -151,8 +149,14 @@ class Config:
     return NotifyProxy(self.notifiers)
 
   def set_autoreset(self, v):
-    self.do_autoreset = bool(v)
+    self.auto_reset = bool(v)
 
+  def get_proto_config(self):
+    from taf.event_proto import Config
+    c = Config()
+    c.auto_reset = self.auto_reset
+    return c
+  
   def load_config_by_fn(self, fn):
     file = open(fn, 'rb')
     file_data = file.read()

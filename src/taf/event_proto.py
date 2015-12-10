@@ -22,6 +22,7 @@
 #   0x01: UInts
 #   0x02: String (i.e. octet sequence)
 #   0x03: Lists (<uint32 object count>, <object...>)
+#   0x04: UTF-8 encoded text
 # All integers are encoded big-endian.
 
 # A TAF protocol /message/ is a [Uint, ...] list, where the initial uint element specifies the message type:
@@ -32,6 +33,7 @@
 #   0x04: Watch set: <string bitmask>
 #   0x05: Reset.
 #   0x06: Notify
+#   0x07: Config
 
 import logging
 import re
@@ -82,6 +84,11 @@ def parse_list(data):
     raise TafProtocolError('List depth contents mismatch in {!r}: {} != {}'.format(data, size_total, off))
 
   return (rv, size_total)
+
+@reg_parser(0x04)
+def parse_text(data):
+  (b, sz) = parse_string(data)
+  return (bytes(b).decode('utf-8'), sz)
 
 def parse_object(data):
   tc = data[4]
@@ -142,12 +149,16 @@ class Encoder:
     self.data.extend(b)
 
   @reg_encoder(bytes)
-  def encode_string(self, val):
+  def encode_string(self, val, tc=0x02):
     length = len(val)
     self.set_size(length, len(self.data))
-    self.data.append(0x02)
+    self.data.append(tc)
     self.data.extend(val)
-    
+
+  @reg_encoder(str)
+  def encode_text(self, val):
+    self.encode_string(val.encode('utf-8'), tc=0x04)
+  
   @reg_encoder(list)
   def encode_list(self, val):
     b = len(self.data)
@@ -195,6 +206,7 @@ MSG_NAMES = {
   'WATCH_SET': 0x04,
   'RESET': 0x05,
   'NOTIFY': 0x06,
+  'CONFIG': 0x07
 }
 
 for (k,v) in MSG_NAMES.items():
@@ -215,6 +227,26 @@ def reg_es_parsers(cls):
 
   cls.msg_handlers = m
   return cls
+
+
+class Config:
+  def __init__(self):
+    self.auto_reset = False
+
+  def to_msg(self):
+    def map(v):
+      if isinstance(v, bool):
+        v = int(v)
+      return v
+    
+    return [[k,map(v)] for (k,v) in self.__dict__.items()]
+
+  @classmethod
+  def build_from_dict(cls, d):
+    rv = cls()
+    for (k,v) in d.items():
+      setattr(rv, k, v)
+    return rv
 
 
 @reg_es_parsers
@@ -303,7 +335,10 @@ class EventStreamClient(EventStream):
     self.send_msg([MSG_ID_WATCH_SETUP, fn_p, line_p])
 
     return w
-    
+
+  def send_config(self, config):
+    self.send_msg([MSG_ID_CONFIG] + config.to_msg())
+
 
 @reg_es_parsers
 class EventStreamServer(EventStream):
@@ -311,6 +346,7 @@ class EventStreamServer(EventStream):
     super().__init__(*args, **kwargs)
     self.watchs = []
     self.fn2ws = {}
+    self.c = Config()
 
   def send_ACK(self):
     self.send_msg([MSG_ID_ACK])
@@ -346,7 +382,8 @@ class EventStreamServer(EventStream):
         if (m is None):
           continue
 
-        w.set = True
+        if (not self.c.auto_reset):
+          w.set = True
         self.send_msg([MSG_ID_NOTIFY, w.idx])
         break
 
@@ -381,6 +418,10 @@ class EventStreamServer(EventStream):
       self.fn2ws[fn] = ws
     
     return ws
+
+  def process_msg_CONFIG(self, msg):
+    self.c = Config.build_from_dict(dict(msg[1:]))
+
 
 if (__name__ == '__main__'):
   _test_serialization()
